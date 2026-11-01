@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Мани — AI-агент Honey Money</title>
+<meta name="description" content="Honey Money: AI-агент Мани читает новости эмитентов, перепроверяет цифры и объясняет вывод. Решение остаётся за вами.">
+<meta name="theme-color" content="#151512">
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<link rel="stylesheet" href="assets/css/fx.css">
+</head>
+<body>
+
+<!-- заставка: Мани бежит, пока читается отчёт -->
+<div class="loader" id="loader" aria-hidden="true">
+  <p class="loader__t">Мани читает отчёт</p>
+  <div class="loader__lane"><div class="loader__runner"><img src="assets/img/mani/run.webp" alt="" width="900" height="567"></div></div>
+  <div class="loader__foot"><b class="loader__n"><span id="loaderN">0</span><small>%</small></b><span class="loader__hint" id="loaderHint">honey money · новостной модуль</span></div>
+</div>
+
+<div class="progress" aria-hidden="true"><i id="progress"></i></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="cursor" aria-hidden="true"></div>
+
+<!-- ============ ШАПКА ============ -->
+<header class="nav">
+  <a class="logo" href="#top" aria-label="Honey Money — наверх"><img src="assets/img/logo-light.png" alt="Honey Money" width="73" height="30"></a>
+  <nav class="nav__links" aria-label="Разделы">
+    <a href="#demo">Сигналы</a>
+    <a href="#trust">Точность</a>
+    <a href="#how">Как устроен</a>
+  </nav>
+  <button class="nav__journal" type="button" id="journalBtn" aria-label="Журнал решений">Журнал <b id="journalCount">0</b></button>
+</header>
+
+<main id="top">
+
+  <!-- ============ 1. ПЕРВЫЙ ЭКРАН ============ -->
+  <section class="hero">
+    <div class="hero__glow hero__glow--a"></div>
+    <div class="hero__glow hero__glow--b"></div>
+
+    <div class="hero__top">
+      <span class="caps">AI-агент для инвестиций</span>
+      <span class="live"><i></i>прототип · реальные данные</span>
+    </div>
+
+    <h1 class="hero__title" aria-label="Мани читает новости за вас">
+      <span class="ln"><span>Мани читает</span></span>
+      <span class="ln"><span>новости</span></span>
+      <span class="ln"><span class="lime hero__last">за&nbsp;вас<img class="hero__peek" src="assets/img/mani/peek-white.webp" alt="" width="900" height="317"></span></span>
+    </h1>
+
+    <div class="hero__chips" id="heroChips" aria-hidden="true"></div>
+
+    <div class="hero__foot">
+      <p>Раскрытие эмитента → понятный вывод, проверенные&nbsp;цифры и&nbsp;честная уверенность. <b>Решение — за&nbsp;вами.</b></p>
+      <a class="cta" href="#demo"><span>Попробовать</span><i>↓</i></a>
+    </div>
+
+    <div class="ticker" id="ticker" aria-label="Котировки первого эшелона"><div class="ticker__track" id="tickerTrack"></div></div>
+  </section>
+
+  <!-- ============ 2. ДЕМО ============ -->
+  <section class="demo" id="demo">
+    <div class="sec-head">
+      <h2 class="big" data-split>Выберите новость. <em>Мани объяснит.</em></h2>
+      <p class="sec-head__aside" id="demoAside">Настоящие раскрытия из отчёта скоринга</p>
+    </div>
+
+    <div class="console" id="console">
+      <aside class="rail">
+        <div class="search" id="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input id="q" type="search" autocomplete="off" placeholder="Компания, тикер или «дефолт»" aria-label="Поиск новости" aria-controls="suggest" aria-expanded="false">
+          <ul class="suggest" id="suggest" role="listbox" hidden></ul>
+        </div>
+        <p class="rail__t">Примеры</p>
+        <div class="tickets" id="tickets"></div>
+      </aside>
+
+      <div class="stage" id="stage" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ============ ДОРОЖКА: Мани бежит при прокрутке ============ -->
+  <section class="runway" id="runway" aria-hidden="true">
+    <div class="runway__row runway__row--a"><span>Читает · Проверяет · Объясняет · Читает · Проверяет · Объясняет · Читает · Проверяет · Объясняет ·</span></div>
+    <div class="runway__lane">
+      <div class="runway__runner" id="runner"><i></i><i></i><i></i><img src="assets/img/mani/run.webp" alt="" width="900" height="567" loading="lazy"></div>
+    </div>
+    <div class="runway__row runway__row--b"><span>Не торгует за вас · Решение — ваше · Не торгует за вас · Решение — ваше · Не торгует за вас · Решение — ваше ·</span></div>
+  </section>
+
+  <!-- ============ 3. ТОЧНОСТЬ ============ -->
+  <section class="trust" id="trust">
+    <div class="sec-head">
+      <h2 class="big" data-split>Проверили <em>вслепую.</em></h2>
+      <p class="sec-head__aside" id="trustAside"></p>
+    </div>
+
+    <div class="bento" id="bento"></div>
+
+    <div class="trust__row">
+      <figure class="chart">
+        <figcaption><b>Верный знак на 44 новых новостях</b><span>доля и 95% интервал</span></figcaption>
+        <div class="vbars" id="vbars"></div>
+        <div class="tip" id="tip" hidden></div>
+      </figure>
+      <div class="cases">
+        <p class="cases__t"><b>Разборы из отчёта</b><span>где Мани прав — и где ошибся</span></p>
+        <div class="cases__list" id="cases"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. КАК УСТРОЕН ============ -->
+  <section class="how" id="how">
+    <svg class="squiggle" viewBox="0 0 1600 1800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <path id="squigglePath" pathLength="1" d="M-120 300 C 160 120, 430 170, 380 430 C 330 690, 560 780, 770 570 C 980 360, 1110 190, 1270 330 C 1430 470, 1230 770, 1330 990 C 1430 1210, 1720 1130, 1650 1420 C 1590 1680, 1250 1560, 1120 1920"/>
+    </svg>
+
+    <div class="sec-head">
+      <h2 class="big" data-split>Семь шагов <em>от текста до вывода.</em></h2>
+      <p class="sec-head__aside">Итог считает формула, а&nbsp;не&nbsp;языковая модель. Каждое число — из&nbsp;сообщения или помечено как вычисленное.</p>
+    </div>
+
+    <ol class="steps" id="steps"></ol>
+
+    <div class="where">
+      <img src="assets/img/mani/run.webp" alt="" width="900" height="567" loading="lazy" class="where__mani">
+      <div class="where__body">
+        <p class="caps">Место в Honey Money</p>
+        <h3>Часть системы Honey Money</h3>
+        <div class="chain">
+          <span>ML-сигналы</span>
+          <span class="on">Новости</span>
+          <span>Bull ⇄ Bear</span>
+          <span>Риск-гейт</span>
+          <span class="you">Вы</span>
+          <i class="chain__dot"></i>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ ПОДВАЛ ============ -->
+<footer class="foot">
+  <div class="foot__cta">
+    <p class="caps">Решение — за вами</p>
+    <a class="cta cta--big" href="#demo"><span>Спросить Мани</span><i>↑</i></a>
+  </div>
+  <img class="foot__logo" src="assets/img/logo-light.png" alt="Honey Money" width="1995" height="815" loading="lazy">
+  <div class="foot__row">
+    <p id="footNote">Данные — публичные раскрытия эмитентов. Оценки получены автоматически и не являются инвестиционной рекомендацией.</p>
+    <p>Источник: <button type="button" class="link" id="srcBtn">news_scoring_report.html</button><br><label class="link">загрузить свой отчёт<input type="file" id="fileInput" accept=".html,.htm,text/html" hidden></label></p>
+    <p>Академия Финтеха ВТБ<br>Startoken × R&amp;D Lab<br><a href="https://t.me/imnomberone" target="_blank" rel="noopener">@imnomberone</a> · <a href="https://t.me/vcshss" target="_blank" rel="noopener">@vcshss</a></p>
+  </div>
+</footer>
+
+<!-- ============ ЖУРНАЛ РЕШЕНИЙ ============ -->
+<aside class="drawer" id="drawer" aria-label="Журнал решений" hidden>
+  <div class="drawer__head">
+    <div><b>Журнал решений</b><span>каждое решение — с данными, на которых оно принято</span></div>
+    <button type="button" class="x" id="drawerClose" aria-label="Закрыть">×</button>
+  </div>
+  <ul class="jlist" id="jlist"></ul>
+  <button type="button" class="link" id="jclear">Очистить журнал</button>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<!-- Мани-компаньон: реагирует на действия и разделы -->
+<div class="buddy" id="buddy">
+  <button type="button" class="buddy__btn" id="buddyBtn" aria-label="Мани — нажмите, чтобы узнать факт из отчёта"><img class="buddy__img" id="buddyImg" src="assets/img/mani/zen.webp" alt="" width="900" height="780"></button>
+  <p class="buddy__say" id="buddySay" role="status" aria-live="polite"></p>
+</div>
+<div class="fx-layer" id="fxLayer" aria-hidden="true"></div>
+
+<script src="assets/js/report.js" defer></script>
+<script src="assets/js/app.js" defer></script>
+<script src="assets/js/fx.js" defer></script>
+</body>
+</html>

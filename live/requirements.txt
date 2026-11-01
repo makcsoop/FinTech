@@ -1,0 +1,11 @@
+# Зависимости живого режима (сборщик и агент новостей). Торговая часть сюда не входит.
+pydantic>=2.10
+pyyaml>=6.0
+feedparser>=6.0
+lxml>=4.9
+beautifulsoup4>=4.12
+requests>=2.31
+certifi>=2024.2
+httpx>=0.27
+telethon>=1.36
+tenacity>=9.0

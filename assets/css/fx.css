@@ -1,0 +1,180 @@
+/* ============================================================
+   Honey Money · живой Мани и эффекты (к fx.js)
+   ============================================================ */
+
+/* ---------- заставка ---------- */
+.loading { overflow: hidden; }
+.loader {
+  position: fixed; inset: 0; z-index: 400; display: grid; grid-template-rows: auto 1fr auto;
+  padding: 28px var(--gutter) 32px; background: var(--lime); color: var(--ink); overflow: hidden;
+  clip-path: inset(0 0 0 0); transition: clip-path 1s cubic-bezier(.76, 0, .24, 1);
+}
+.loader.out { clip-path: inset(0 0 100% 0); }
+.loader__t { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .24em; text-transform: uppercase; }
+.loader__lane { position: relative; align-self: center; height: clamp(150px, 24vw, 320px); }
+.loader__lane::after { content: ""; position: absolute; left: 0; right: 0; bottom: 2%; height: 3px; background: repeating-linear-gradient(90deg, var(--ink) 0 26px, transparent 26px 52px); opacity: .25; }
+.loader__runner { position: absolute; left: 0; bottom: 0; height: 100%; }
+.loader__runner img { height: 100%; width: auto; max-width: none; transform-origin: 50% 100%; animation: gallop .26s ease-in-out infinite alternate; }
+@keyframes gallop { from { transform: translateY(0) rotate(2deg); } to { transform: translateY(-9%) rotate(-3deg); } }
+.loader__foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+.loader__n { font-size: clamp(96px, 19vw, 280px); font-weight: 800; letter-spacing: -.06em; line-height: .78; font-variant-numeric: tabular-nums; }
+.loader__n small { font-size: .3em; letter-spacing: 0; margin-left: .1em; }
+.loader__hint { font-size: 14px; font-weight: 600; opacity: .7; text-align: right; }
+
+/* ---------- полоса прогресса ---------- */
+.progress { position: fixed; z-index: 95; left: 0; right: 0; top: 0; height: 3px; pointer-events: none; }
+.progress i { display: block; height: 100%; background: var(--lime); transform: scaleX(0); transform-origin: 0 50%; box-shadow: 0 0 12px rgba(223, 248, 103, .8); }
+
+/* ---------- первый экран ---------- */
+.hero__spot {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(520px circle at var(--mx, 70%) var(--my, 40%), rgba(223, 248, 103, .13), transparent 65%);
+}
+.revealed .hero__title .ln { overflow: visible; }
+.hero__title .wd { display: inline-block; white-space: nowrap; }
+.hero__title .ch { display: inline-block; transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), color .3s; }
+.revealed .hero__title .ch:hover { transform: translateY(-.12em) rotate(-7deg); color: var(--lime); transition-duration: .2s; }
+.revealed .hero__title .lime .ch:hover { color: var(--paper); }
+.hero__title.wave .ch { animation: letterwave .9s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--ci) * 38ms); }
+@keyframes letterwave { 35% { transform: translateY(-.14em) rotate(-4deg); color: var(--lime); } }
+.hero__title .lime.ch, .hero__title.wave .lime .ch { animation-name: letterwave2; }
+@keyframes letterwave2 { 35% { transform: translateY(-.14em) rotate(-4deg); color: var(--paper); } }
+.hero__peek { cursor: pointer; transition: transform .8s var(--ease) .9s, opacity .4s .9s, rotate .4s var(--ease), translate .4s var(--ease); }
+.revealed .hero__peek { animation: peekhop 7s ease-in-out 1.5s infinite; }
+@keyframes peekhop {
+  0%, 72%, 100% { transform: translateY(0); }
+  77% { transform: translateY(-26%) rotate(-4deg); }
+  81% { transform: translateY(0); }
+  85% { transform: translateY(-10%) rotate(3deg); }
+  89% { transform: translateY(0); }
+}
+.hero__peek.hop { animation: peekjump .7s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes peekjump { 40% { transform: translateY(-45%) rotate(-8deg) scale(1.08); } }
+
+/* ---------- дорожка: Мани бежит при прокрутке ---------- */
+.runway {
+  position: relative; z-index: 6; margin-top: -40px; border-radius: 40px 40px 0 0; overflow: hidden;
+  padding: clamp(60px, 8vw, 110px) 0; background: var(--lime); color: var(--ink);
+}
+.runway__row { white-space: nowrap; font-size: clamp(54px, 9.5vw, 150px); font-weight: 800; letter-spacing: -.05em; line-height: .95; }
+.runway__row span { display: inline-block; will-change: transform; }
+.runway__row--b { color: transparent; -webkit-text-stroke: 2px var(--ink); }
+.runway__lane { position: relative; height: clamp(120px, 15vw, 220px); margin: clamp(10px, 2vw, 24px) 0; }
+.runway__lane::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: repeating-linear-gradient(90deg, var(--ink) 0 26px, transparent 26px 52px); opacity: .3; }
+.runway__runner { position: absolute; left: 0; bottom: 0; height: 100%; will-change: transform; transform: translateX(-140%); transform-origin: 50% 100%; }
+.runway__runner img { height: 100%; width: auto; max-width: none; }
+.runway__runner i { position: absolute; right: 92%; height: 5px; border-radius: 3px; background: var(--ink); opacity: 0; transition: opacity .25s, transform .25s var(--ease); transform: scaleX(.3); transform-origin: 100% 50%; }
+.runway__runner i:nth-child(1) { top: 30%; width: 70px; }
+.runway__runner i:nth-child(2) { top: 48%; width: 110px; }
+.runway__runner i:nth-child(3) { top: 66%; width: 60px; }
+.runway__runner.moving i { opacity: .7; transform: none; }
+
+/* слоёные секции: каждая наезжает на предыдущую */
+.trust { z-index: 7; margin-top: -40px; border-radius: 40px 40px 0 0; }
+.how { z-index: 8; margin-top: -40px; border-radius: 40px 40px 0 0; }
+.foot { z-index: 9; }
+
+/* ---------- Мани-компаньон ---------- */
+.buddy {
+  position: fixed; z-index: 96; left: 18px; bottom: 16px; display: flex; align-items: flex-end; gap: 4px;
+  pointer-events: none; transform: translateY(160%); transition: transform .7s cubic-bezier(.34, 1.4, .64, 1);
+}
+.buddy.on { transform: none; }
+.buddy__btn {
+  pointer-events: auto; position: relative; flex: none; width: 96px; height: 96px; padding: 0; border: 0; cursor: pointer;
+  border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 3px var(--ink), 0 18px 40px -12px rgba(0, 0, 0, .6);
+  transition: translate .3s var(--ease);
+}
+.buddy__img {
+  position: absolute; left: 6%; right: 6%; bottom: 4%; width: 88%; height: 118%; object-fit: contain; object-position: 50% 100%;
+  transform-origin: 50% 100%; scale: var(--dir, 1) 1; animation: breathe 3.2s ease-in-out infinite;
+}
+@keyframes breathe { 50% { transform: scaleY(1.035) translateY(-1%); } }
+.buddy.swap .buddy__img { animation: swapin .4s cubic-bezier(.34, 1.56, .64, 1), breathe 3.2s ease-in-out .4s infinite; }
+@keyframes swapin { from { transform: scale(.6) translateY(12%); opacity: .2; } }
+.buddy.hop .buddy__img { animation: buddyhop .65s cubic-bezier(.34, 1.56, .64, 1), breathe 3.2s ease-in-out .65s infinite; }
+@keyframes buddyhop { 40% { transform: translateY(-28%) rotate(-6deg); } 70% { transform: translateY(0) scaleY(.92); } }
+.buddy__say {
+  pointer-events: auto; margin: 0 0 64px; max-width: 270px; padding: 12px 16px; border-radius: 18px 18px 18px 4px;
+  background: var(--ink); color: var(--paper); border: 1px solid rgba(223, 248, 103, .45);
+  font-size: 14px; font-weight: 600; line-height: 1.4; box-shadow: 0 20px 40px -16px rgba(0, 0, 0, .6);
+  opacity: 0; transform: translateY(10px) scale(.92); transform-origin: 0 100%; transition: opacity .3s, transform .45s cubic-bezier(.34, 1.56, .64, 1);
+}
+.buddy__say.on { opacity: 1; transform: none; }
+.buddy__say:empty { display: none; }
+
+/* ---------- частицы ---------- */
+.fx-layer { position: fixed; inset: 0; z-index: 250; pointer-events: none; overflow: hidden; }
+.coin {
+  position: fixed; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--lime); color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); font-style: normal; font-weight: 800; font-size: 13px;
+  animation: coinfly 1.3s cubic-bezier(.2, .7, .3, 1) both;
+}
+.coin.neg { background: var(--neg); }
+@keyframes coinfly {
+  0% { transform: translate(0, 0) scale(.2) rotate(0); opacity: 0; }
+  12% { opacity: 1; }
+  55% { transform: translate(calc(var(--dx) * .85), var(--dy)) scale(var(--s)) rotate(calc(var(--r) * .6)); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + 160px)) scale(calc(var(--s) * .7)) rotate(var(--r)); opacity: 0; }
+}
+.zz { position: fixed; font-style: normal; font-weight: 800; color: var(--ink); animation: zz 2s ease-out both; }
+@keyframes zz { from { transform: translate(0, 0); opacity: 0; } 20% { opacity: 1; } to { transform: translate(40px, -90px) rotate(15deg); opacity: 0; } }
+.ripple { position: fixed; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid var(--lime); animation: ripple .65s ease-out both; }
+@keyframes ripple { to { transform: scale(5); opacity: 0; } }
+
+/* реакции вердикта */
+.verdict.shake { animation: shake .55s cubic-bezier(.36, .07, .19, .97); }
+@keyframes shake { 15%, 55% { translate: -7px 0; } 35%, 75% { translate: 7px 0; } 90% { translate: -2px 0; } }
+
+/* пока Мани думает — ноутбук «печатает», над ним летят цифры */
+.stage.busy .scan img { animation: typing .18s ease-in-out infinite alternate; }
+@keyframes typing { to { transform: translateY(-3px) rotate(-1deg); } }
+.bit {
+  position: absolute; top: 40%; z-index: 6; font-style: normal; font-weight: 800; font-size: 18px; color: var(--ink);
+  animation: bitup 1.4s ease-out both; pointer-events: none;
+}
+.bit:nth-child(3n) { color: var(--lime-deep); }
+@keyframes bitup { from { transform: translate(0, 0) scale(.6); opacity: 0; } 20% { opacity: 1; } to { transform: translate(var(--dx), -160px) scale(1.2); opacity: 0; } }
+
+/* ---------- курсор с подписью ---------- */
+.cursor span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--ink); white-space: nowrap; opacity: 0; transition: opacity .2s; }
+.has-cursor .cursor.label { mix-blend-mode: normal; }
+.has-cursor .cursor.label::after { transform: scale(5); }
+.cursor.label span { opacity: 1; }
+
+/* ---------- наклон карточек и блик ---------- */
+.bento, .cases__list, .trust__row, .stage, .meters, .ops, .cmp { perspective: 1100px; }
+.tile { position: relative; transition: opacity .9s var(--ease), transform .9s var(--ease), rotate .5s var(--ease); transition-delay: var(--d, 0s), var(--d, 0s), 0s; }
+.case { position: relative; transition: border-color .2s, transform .25s var(--ease), background .2s, rotate .5s var(--ease); }
+.chart, .op, .meter, .cmp__c { transition: rotate .5s var(--ease); }
+.stage.shown > .verdict { transition: opacity .5s, transform .7s var(--ease), rotate .5s var(--ease); transition-delay: calc(var(--k, 0) * 60ms), calc(var(--k, 0) * 60ms), 0s; }
+.tile::after, .case::after, .chart::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s;
+  background: radial-gradient(280px circle at var(--gx, 50%) var(--gy, 50%), rgba(250, 248, 243, .12), transparent 70%);
+}
+.tile--lime::after { background: radial-gradient(280px circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, .45), transparent 70%); }
+.tile:hover::after, .case:hover::after, .chart:hover::after { opacity: 1; }
+
+/* магнитные кнопки плавно возвращаются */
+.cta { transition: transform .3s var(--ease), box-shadow .3s, translate .35s var(--ease); }
+.nav__journal { transition: background .2s, translate .35s var(--ease); }
+.decide__btns button { transition: background .2s, color .2s, transform .2s var(--ease), translate .35s var(--ease); }
+.ticket:hover { transform: translateX(4px); }
+
+@media (max-width: 760px) {
+  .buddy { left: 10px; bottom: 10px; }
+  .buddy__btn { width: 68px; height: 68px; }
+  .buddy__say { margin-bottom: 44px; max-width: min(240px, calc(100vw - 100px)); font-size: 13px; padding: 10px 13px; }
+  .runway__row--b { -webkit-text-stroke-width: 1.5px; }
+  .loader__hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loader, .runway__runner i { display: none; }
+}
+
+/* место для медоеда над «за вас» */
+.hero__title .ln:last-child { margin-top: .14em; }
+
+/* «Мани думает» — у верхнего края ответа, чтобы было видно и на телефоне */
+.stage.busy .scan { place-content: start center; padding-top: clamp(50px, 10vh, 140px); }
+.bit { top: calc(clamp(50px, 10vh, 140px) + 60px); }
