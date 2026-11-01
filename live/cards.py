@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 MSK = timezone(timedelta(hours=3))
@@ -61,6 +61,11 @@ def build_card(t: str, claims: List[Any], view: Optional[Any], ctx: Dict[str, An
         if ev and all(e[0].event_type != ev.event_type for e in events):
             events.append((ev, why_not, c))
 
+    stale = bool(agent and agent.get("_stale"))
+    at = ctx.get("analyzed_at")
+    if agent and agent.get("_at"):
+        d = datetime.fromtimestamp(agent["_at"], MSK)
+        at = d.strftime("%H:%M") if d.date() == ctx["now"].astimezone(MSK).date() else d.strftime("%d.%m, %H:%M")
     score = float(agent["s"]) if agent else None
     conf = float(agent["c"]) if agent else None
     if score is None:
@@ -78,7 +83,8 @@ def build_card(t: str, claims: List[Any], view: Optional[Any], ctx: Dict[str, An
     if agent:
         checks.append(dict(cls="info", status="LLM", title="Агент новостей",
                            text=f"Оценка модели по {len(cited)} {_plural(len(cited), 'заголовку', 'заголовкам', 'заголовкам')}"
-                                f" · {llm.get('model') or 'LLM'} · разбор в {ctx.get('analyzed_at') or '—'}.", effect=""))
+                                f" · {llm.get('model') or 'LLM'} · разбор в {at or '—'}."
+                                + (" Свежий цикл агента бумагу не упоминал — это последний разбор." if stale else ""), effect=""))
     elif not llm.get("enabled"):
         checks.append(dict(cls="warn", status="нет ключа", title="Агент новостей не запускался",
                            text="В .env модели нет POLZA_API_KEY. В брифинге модели здесь было бы «нет данных».", effect=""))
@@ -160,22 +166,19 @@ def build_card(t: str, claims: List[Any], view: Optional[Any], ctx: Dict[str, An
         "watch": [],
         "opinions": opinions,
         "set": "live",
+        "analyzed_at": at,                        # когда агент разобрал бумагу
+        "stale": stale,                           # разбор из прошлого цикла агента
     }
 
 
 def build(claims, view, universe: List[str], ctx: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Карточка на каждую бумагу universe, по которой есть заголовки в окне или оценка агента."""
+    """Карточка на каждую бумагу, которую оценил агент. Остальные заголовки — в ленте новостей (/api/news)."""
     per: Dict[str, List[Any]] = {t: [] for t in universe}
     for c in claims:
         for t in c.tickers:                    # NewsFeed уже оставил только тикеры universe
             if t in per:
                 per[t].append(c)
     all_by_id = {c.claim_id: c for c in claims}
-    out = [build_card(t, per[t], view, ctx, all_by_id) for t in universe if per[t] or (view and t in view.per_ticker)]
-    # сначала оценённые агентом, сильные первыми; затем остальные по свежести
-    out.sort(key=lambda x: (x["score"] is None, -abs(x["score"] or 0), "" if x["score"] is not None else x["ts"]))
-    if out:
-        unscored = [c for c in out if c["score"] is None]
-        unscored.sort(key=lambda x: x["ts"], reverse=True)
-        out = [c for c in out if c["score"] is not None] + unscored
+    out = [build_card(t, per[t], view, ctx, all_by_id) for t in universe if view and view.per_ticker.get(t)]
+    out.sort(key=lambda x: (x["stale"], -abs(x["score"] or 0)))   # свежий цикл первым, сильные оценки выше
     return out

@@ -214,8 +214,8 @@
   function liveScenarios() {
     const rank = (it) => (it.score == null ? 0 : 1 + Math.abs(it.score) * (it.confidence || 0)) + Math.min(0.5, (it.n_claims || 0) * 0.05);
     const out = []; const seen = new Set();
-    R.items.slice().sort((a, b) => rank(b) - rank(a)).forEach((it) => {
-      if (out.length < 8 && !seen.has(it.ticker)) { seen.add(it.ticker); out.push({ id: it.id, hook: clip(it.title, 72) }); }
+    R.items.slice().sort((a, b) => (a.stale - b.stale) || rank(b) - rank(a)).forEach((it) => {
+      if (!seen.has(it.ticker)) { seen.add(it.ticker); out.push({ id: it.id, hook: clip(it.title, 72) }); }
     });
     return out;
   }
@@ -224,9 +224,9 @@
     if (isLive()) {
       scenarios = liveScenarios();
       renderTicketList();
+      $('.rail__t').textContent = `Разборы агента · ${scenarios.length}`;
       const L = R.live;
-      const scored = R.items.filter((it) => it.score != null).length;
-      $('#demoAside').innerHTML = `Живая лента модели: <b>${R.items.length} бумаг в новостях</b>, агент оценил ${scored} · ${L.items_total} заголовков за ${L.window_h} ч из ${L.sources_active} источников · обновлено в ${hm(L.updated_at)}`;
+      $('#demoAside').innerHTML = `Живая лента: <b>агент оценил ${R.items.length} ${R.items.length % 10 === 1 && R.items.length % 100 !== 11 ? 'бумагу' : [2, 3, 4].includes(R.items.length % 10) && ![12, 13, 14].includes(R.items.length % 100) ? 'бумаги' : 'бумаг'}</b> · ${L.items_total} заголовков за ${L.window_h} ч из ${L.sources_active} источников · обновлено в ${hm(L.updated_at)}`;
       return;
     }
     const list = SCENARIOS.filter((s) => R.byId[s.id]);
@@ -239,7 +239,7 @@
       const it = R.byId[sc.id]; const m = mood(it);
       return `<button type="button" class="ticket ${m.key}" data-id="${esc(it.id)}">
         <span class="ticket__b">${esc(badge(it))}</span>
-        <span class="ticket__body"><b>${esc(sc.hook)}</b><small>${esc(shortName(it.issuer))} · ${esc(it.time ? it.date.slice(0, 5) + ' ' + it.time : it.date)}</small></span>
+        <span class="ticket__body"><b>${esc(sc.hook)}</b><small>${esc(shortName(it.issuer))} · ${esc(it.analyzed_at ? 'разбор в ' + it.analyzed_at : it.time ? it.date.slice(0, 5) + ' ' + it.time : it.date)}</small></span>
         <span class="ticket__s num">${fmt(it.score, { sign: true })}</span>
       </button>`;
     }).join('');
@@ -425,7 +425,7 @@
       <div class="verdict ${m.key}">
         <img class="verdict__mani" src="assets/img/mani/${m.img}.webp" alt="Мани">
         <div class="verdict__txt">
-          <p class="caps">Вердикт Мани · ${esc(clip(target(it), 48))}</p>
+          <p class="caps">Вердикт Мани · ${esc(clip(target(it), 48))}${it.analyzed_at ? ` · разбор в ${esc(it.analyzed_at)}` : ''}</p>
           <h3><span class="vw">${m.word}</span> <span class="vt">— ${m.title}</span></h3>
           <p>${esc(oneLine(it))}</p>
         </div>

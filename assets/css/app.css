@@ -214,6 +214,8 @@ span.tk-i:hover b { text-decoration: none; }
 .rail__t { margin: 8px 4px 0; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: #77746A; font-weight: 600; }
 
 .tickets { display: flex; flex-direction: column; gap: 4px; }
+/* много разборов — список прокручивается внутри липкой колонки */
+.rail .tickets { max-height: calc(100vh - 250px); overflow: hidden auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--ink-3) transparent; }
 .ticket {
   display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; text-align: left;
   padding: 10px 12px 10px 10px; border: 0; border-radius: 18px; background: transparent; color: var(--paper); cursor: pointer;
@@ -541,9 +543,8 @@ span.tk-i:hover b { text-decoration: none; }
 @media (max-width: 900px) {
   .console { grid-template-columns: minmax(0, 1fr); border-radius: 28px; }
   .rail { position: static; padding: 8px 4px 4px; min-width: 0; }
-  .tickets { flex-direction: row; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; margin: 0 -4px; scrollbar-width: none; }
-  .tickets::-webkit-scrollbar { display: none; }
-  .ticket { flex: 0 0 min(280px, 78vw); scroll-snap-align: start; background: var(--ink-2); }
+  .rail .tickets { max-height: 340px; }          /* на телефоне тоже столбиком: прокрутка только вверх-вниз */
+  .ticket { background: var(--ink-2); }
   .stage { scroll-margin-top: 80px; min-height: 0; }
   .sec-head { grid-template-columns: 1fr; }
 }
@@ -598,3 +599,4 @@ span.tk-i:hover b { text-decoration: none; }
 .facts a.src { display: inline-block; margin-top: 6px; font-size: 12.5px; color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
 .facts a.src:hover { color: var(--ink); border-color: var(--ink); }
 .facts li > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+

@@ -22,6 +22,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 
 SITE = Path(__file__).resolve().parents[1]
 MOEX = Path(os.environ.get("HM_MOEX_DIR") or SITE.parent / "honey-money-moex").resolve()
@@ -72,6 +73,12 @@ from src.data.news.collector import collector_running, live_dir  # noqa: E402
 from src.hm2 import llm, news  # noqa: E402
 
 UNIVERSE = portfolios.load().universe
+
+
+HISTORY = CACHE / "history.json"                   # разборы агента за окно — переживают перезапуск
+HISTORY_H = int(os.environ.get("HISTORY_H", "18"))      # свежие разборы: окно новостей
+HISTORY_KEEP_H = 7 * 24                                  # храним неделю — запас, чтобы лента не пустела
+MIN_CARDS = int(os.environ.get("MIN_CARDS", "6"))       # меньше свежих — добираем последними старыми
 
 FLOW = [
     {"label": "Сборщик новостей: ленты, сайты, Telegram", "type": "core"},
@@ -262,6 +269,11 @@ class Live:
         self.feed = news.NewsFeed([DATA / "news_live", DATA / "news"], UNIVERSE)
         self.view = None
         self.analyzed_at = 0.0
+        self.history = {}                       # тикер → последний разбор агента за окно
+        try:
+            self.history = json.loads(HISTORY.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
         self.version = 0
         self.payload = None
         self.error = None
@@ -283,6 +295,39 @@ class Live:
             return {"ok": False, "status": "warming", "error": public_error(self.error),
                     "message": "Сборщик модели наполняет журнал — это занимает около минуты"}
 
+    def remember(self, view) -> None:
+        """Копим разборы агента: бумага, которую он оценил, остаётся карточкой до 18 ч с последним разбором."""
+        for t, a in (view.per_ticker or {}).items():
+            if a:
+                self.history[t] = {"at": self.analyzed_at, "agent": dict(a)}
+        try:
+            HISTORY.write_text(json.dumps(self.history, ensure_ascii=False, default=str), encoding="utf-8")
+        except OSError as e:
+            log.warning("история разборов: %s", e)
+
+    def merged_view(self):
+        """Текущий цикл агента + его разборы за окно по бумагам, которые этот цикл не упомянул.
+
+        Лента не пустеет: если свежих разборов меньше MIN_CARDS (ночь, выходные, агент недоступен),
+        добираем последними более старыми — с датой разбора на карточке."""
+        now = time.time()
+        self.history = {t: h for t, h in self.history.items() if h.get("at", 0) >= now - HISTORY_KEEP_H * 3600}
+        current = (self.view.per_ticker or {}) if self.view else {}
+        recent = sorted(self.history.items(), key=lambda kv: -kv[1]["at"])
+        keep = [kv for kv in recent if kv[1]["at"] >= now - HISTORY_H * 3600 or current.get(kv[0])]
+        keep += [kv for kv in recent if kv not in keep][:max(0, MIN_CARDS - len(keep))]
+        per = {}
+        for t, h in keep:
+            per[t] = dict(h["agent"], _at=h["at"], _stale=not current.get(t))
+        for t, a in current.items():
+            if a:
+                per[t] = dict(a, _at=self.analyzed_at, _stale=False)
+        if not per and not self.view:
+            return None
+        return SimpleNamespace(per_ticker=per, reversals=(self.view.reversals if self.view else {}) or {},
+                               market_overall=self.view.market_overall if self.view else None,
+                               narrative=self.view.narrative if self.view else None)
+
     def news_step(self, claims) -> None:
         """Шаг агента новостей: отбор заголовков, оценка бумаг, сверка с прошлой оценкой."""
         fresh = self.feed.take_fresh()
@@ -297,6 +342,7 @@ class Live:
         if view.error:
             log.warning("агент новостей: %s", view.error)
         self.view = view
+        self.remember(view)
         log.info("агент новостей: %d заголовков → %d бумаг", len(headlines), len(view.per_ticker))
 
     def refresh(self) -> None:
@@ -307,7 +353,7 @@ class Live:
         now = datetime.now(timezone.utc)
         ctx = {"now": now, "quotes": fetch_quotes(), "llm": self.llm,
                "analyzed_at": datetime.fromtimestamp(self.analyzed_at, MSK).strftime("%H:%M") if self.analyzed_at else None}
-        built = cards.build(claims, self.view, UNIVERSE, ctx)
+        built = cards.build(claims, self.merged_view(), UNIVERSE, ctx)
         status = {}
         try:
             status = json.loads((live_dir(DATA) / "status.json").read_text(encoding="utf-8"))
