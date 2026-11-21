@@ -11,7 +11,8 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const fine = matchMedia('(pointer: fine)').matches;
   const body = document.body;
-  const IMG = (n) => `assets/img/mani/${n}.webp`;
+  const { t: tx, plural, base: BASE } = window.HMI18N;
+  const IMG = (n) => `${BASE}assets/img/mani/${n}.webp`;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const ease = (t) => 1 - Math.pow(1 - t, 3);
 
@@ -44,7 +45,7 @@
       n.textContent = Math.round(p * 100);
       const W = loader.clientWidth; const w = runner.offsetWidth;
       runner.style.translate = `${p * (W + w) - w}px 0`;
-      if (ready && report()) $('#loaderHint').textContent = `${report().items.length} новостей прочитано${report().live ? ' · живая лента' : ''}`;
+      if (ready && report()) $('#loaderHint').textContent = tx('{n} новостей прочитано', { n: report().items.length }) + (report().live ? ' · ' + tx('живая лента') : '');
       if (p >= 1) {
         loader.classList.add('out'); body.classList.remove('loading');
         setTimeout(heroStart, 350);
@@ -127,10 +128,10 @@
 
   // что Мани говорит в каждом разделе
   const SCENES = {
-    demo: { pose: 'stand', line: 'Выберите новость слева — я разберу её за пару секунд.' },
-    trust: { pose: 'book', line: 'Я не всегда прав. Вот честная статистика слепого теста.' },
-    how: { pose: 'laptop', line: 'Итог считает формула, а не моя фантазия.' },
-    foot: { pose: 'ruble', line: 'Решение — всегда за вами!' },
+    demo: { pose: 'stand', line: tx('Выберите новость слева — я разберу её за пару секунд.') },
+    trust: { pose: 'book', line: tx('Я не всегда прав. Вот честная статистика слепого теста.') },
+    how: { pose: 'laptop', line: tx('Итог считает формула, а не моя фантазия.') },
+    foot: { pose: 'ruble', line: tx('Решение — всегда за вами!') },
   };
   const said = {};
   let scene = '';
@@ -157,17 +158,17 @@
   // клик по Мани — факт из отчёта
   let factI = 0;
   function facts() {
-    const R = report(); if (!R) return ['Я ещё читаю отчёт…'];
+    const R = report(); if (!R) return [tx('Я ещё читаю отчёт…')];
     const sig = R.items.filter((it) => it.strength === 'signal').length;
     return [
       R.live
-        ? `Сейчас в новостях ${R.items.length} бумаг из ${R.live.universe.length}. Агент новостей оценил ${R.items.filter((it) => it.score != null).length}.`
-        : `Я разобрал ${R.items.length} новостей из отчёта. Сильных сигналов — ${sig}, остальное в основном шум.`,
-      ...(R.live ? [R.live.llm.enabled ? 'Оценку даёт агент новостей модели — так же, как в торговом агенте.' : 'Ключа LLM нет — агент новостей не запускался, у бумаг «нет данных».',
+        ? tx('Агент новостей разобрал {n} {papers} из {all}.', { n: R.items.length, papers: plural(R.items.length, ['бумагу', 'бумаги', 'бумаг'], ['stock', 'stocks']), all: R.live.universe.length })
+        : tx('Я разобрал {n} новостей из отчёта. Сильных сигналов — {sig}, остальное в основном шум.', { n: R.items.length, sig }),
+      ...(R.live ? [R.live.llm.enabled ? tx('Оценку даёт агент новостей Honey Money.') : tx('Ключа LLM нет — агент новостей не запускался, у бумаг «нет данных».'),
         ...(R.live.market && R.live.market.narrative ? [R.live.market.narrative] : [])] : []),
       ...R.brief.map((b) => `${b.value} — ${b.text.split(/[:.]/)[0]}.`),
-      'Каждое число в объяснении — из текста сообщения или помечено как вычисленное.',
-      'Я не совершаю сделок. Рекомендация отделена от исполнения.',
+      tx('Каждое число в объяснении — из текста сообщения или помечено как вычисленное.'),
+      tx('Я не совершаю сделок. Рекомендация отделена от исполнения.'),
     ];
   }
   bBtn.addEventListener('click', () => {
@@ -180,7 +181,7 @@
   addEventListener('mani:thinking', (e) => {
     bits();
     if (e.detail.silent || !demoVisible()) return;
-    pose('laptop', Infinity); talk(`Читаю: ${e.detail.issuer}…`, 1200);
+    pose('laptop', Infinity); talk(tx('Читаю: {x}…', { x: e.detail.issuer }), 1200);
   });
   addEventListener('mani:answer', (e) => {
     const d = e.detail;
@@ -195,16 +196,16 @@
     const R = report(); const it = R && R.byId[e.detail.id];
     if (!it || holding) return;
     pose('peek', 4000); hop();
-    talk(e.detail.n > 1 ? `Обновил оценки: ${e.detail.n} бумаги. Первая — ${it.issuer}.` : `Новое по ${it.issuer}!`, 3200);
+    talk(e.detail.n > 1 ? tx('Обновил оценки: {n} бумаги. Первая — {x}.', { n: e.detail.n, x: it.issuer }) : tx('Новое по {x}!', { x: it.issuer }), 3200);
   });
   addEventListener('mani:decide', (e) => {
     const d = e.detail.d;
     const btn = $(`.decide [data-d="${d}"]`);
     if (d === 'act') {
-      pose('coins', 3500); hop(); talk('Записал в журнал. Решение ваше — я только подсказал.', 2600);
+      pose('coins', 3500); hop(); talk(tx('Записал в журнал. Решение ваше — я только подсказал.'), 2600);
       if (btn) { const r = btn.getBoundingClientRect(); burst(r.left + r.width / 2, r.top, { n: 18, char: '₽' }); }
-    } else if (d === 'wait') { pose('zen', 3500); talk('Подождём. Новость никуда не денется.', 2400); }
-    else { pose('lying', 3500); talk('Пропускаем. Это тоже решение.', 2400); }
+    } else if (d === 'wait') { pose('zen', 3500); talk(tx('Подождём. Новость никуда не денется.'), 2400); }
+    else { pose('lying', 3500); talk(tx('Пропускаем. Это тоже решение.'), 2400); }
   });
 
   /* ============================================================
@@ -340,7 +341,7 @@
      ============================================================ */
   if (fine && !reduced) {
     const cur = $('.cursor'); const label = document.createElement('span'); cur.append(label);
-    const LABELS = [['.ticket, .case, .tk-i, .chip', 'открыть'], ['.hero__peek, .buddy__btn', 'привет'], ['.tabs button', 'смотреть'], ['[data-tip]', 'данные']];
+    const LABELS = [['.ticket, .case, .tk-i, .chip', tx('открыть')], ['.hero__peek, .buddy__btn', tx('привет')], ['.tabs button', tx('смотреть')], ['[data-tip]', tx('данные')]];
     const MAG = '.cta, .nav__journal, .decide__btns button, .buddy__btn';
     const TILT = '.tile, .case, .verdict, .chart, .op, .meter, .cmp__c';
     let magEl = null; let tiltEl = null;

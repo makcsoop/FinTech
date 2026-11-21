@@ -8,6 +8,9 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const { fmt } = window.HMReport;
+  const { t: tx, plural, locale: LOC, base: BASE } = window.HMI18N;
+  /** «вывод» агента: в данных ключ один на обоих языках, подпись — на языке страницы */
+  const isOut = (e) => e.out || e.kind === 'вывод';
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const finePointer = matchMedia('(pointer: fine)').matches;
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -23,14 +26,14 @@
   /* Примеры в консоли: номер из отчёта + понятный заголовок.
      Если номера в отчёте нет, пример просто не показывается. */
   const SCENARIOS = [
-    { id: 'N26', hook: 'Сделка на 47 млрд ₽ — и подозрительная дата' },
-    { id: 'B01', hook: 'Эмитент не заплатил по облигациям' },
-    { id: 'B16', hook: 'EBITDA выросла на 36,8% за год' },
-    { id: 'B19', hook: 'Совет директоров: дивидендов не будет' },
-    { id: 'N15', hook: 'Треть держателей вышла из выпуска' },
-    { id: 'N03', hook: 'Обычный купон — стоит ли волноваться?' },
-    { id: 'B02', hook: 'Правила промолчали, AI-аналитик заметил дефолт' },
-    { id: 'B21', hook: 'Дивиденды, которые рынок и так ждал' },
+    { id: 'N26', hook: tx('Сделка на 47 млрд ₽ — и подозрительная дата') },
+    { id: 'B01', hook: tx('Эмитент не заплатил по облигациям') },
+    { id: 'B16', hook: tx('EBITDA выросла на 36,8% за год') },
+    { id: 'B19', hook: tx('Совет директоров: дивидендов не будет') },
+    { id: 'N15', hook: tx('Треть держателей вышла из выпуска') },
+    { id: 'N03', hook: tx('Обычный купон — стоит ли волноваться?') },
+    { id: 'B02', hook: tx('Правила промолчали, AI-аналитик заметил дефолт') },
+    { id: 'B21', hook: tx('Дивиденды, которые рынок и так ждал') },
   ];
 
   let R = null;
@@ -38,7 +41,7 @@
   let runToken = 0;
   let scenarios = [];
   const isLive = () => !!(R && R.live);
-  const hm = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const hm = (iso) => new Date(iso).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
 
   function toast(msg) {
     const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -48,37 +51,37 @@
   /* ---------- имена и тикеры ---------- */
   /** «ООО "Оил Ресурс"» → «Оил Ресурс», «ПАО "АНК "Башнефть"» → «Башнефть» */
   function shortName(issuer) {
-    const parts = String(issuer || '').split('"').map((s) => s.trim()).filter(Boolean);
+    const parts = String(issuer || '').split(/["“”«»]/).map((s) => s.trim()).filter(Boolean);
     return parts.length > 1 ? parts[parts.length - 1] : String(issuer || '');
   }
   function ticker(it) {
     if (it.ticker) return it.ticker;
-    const m = /акции\s+([A-Z]{3,6})/.exec(it.target || '');
-    return m ? m[1] : null;
+    const m = /акции\s+([A-Z]{3,6})/.exec(it.target || '') || /([A-Z]{3,6})\s+shares|shares\s+([A-Z]{3,6})/.exec(it.target || '');
+    return m ? m[1] || m[2] : null;
   }
   function badge(it) {
     const t = ticker(it); if (t) return t.slice(0, 4);
     const words = shortName(it.issuer).split(/[\s-]+/).filter(Boolean);
     return (words.length > 1 ? words.slice(0, 2).map((w) => w[0]).join('') : words[0].slice(0, 2)).toUpperCase();
   }
-  const target = (it) => it.target || 'бумаги эмитента';
+  const target = (it) => it.target || tx('бумаги эмитента');
   /** Агент модели ссылается на номера заголовков своего промпта — на сайте заголовки показаны списком */
-  const noRefs = (s) => String(s || '').replace(/\s*\((?:заголов[а-яё]*|№)\s*[\d,\sи–-]+\)/gi, '').replace(/\s+([,.;])/g, '$1');
+  const noRefs = (s) => String(s || '').replace(/\s*\((?:заголов[а-яё]*|headlines?|№|#)\s*[\d,\sи–-]+(?:and\s*[\d,\s–-]+)?\)/gi, '').replace(/\s+([,.;])/g, '$1');
   const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).replace(/[\s,.;:]+\S*$/, '') + '…' : s);
 
   /* ---------- как Мани формулирует вердикт ---------- */
   function mood(it) {
-    if (it.score == null) return { key: 'neu', word: 'Нет данных', title: 'агент не оценил бумагу', img: 'zen', short: 'нет данных' };
+    if (it.score == null) return { key: 'neu', word: tx('Нет данных'), title: tx('агент не оценил бумагу'), img: 'zen', short: tx('нет данных') };
     const t = it.verdict.tone; const s = it.strength;
-    if (s === 'none' || t === 'neu') return { key: 'neu', word: 'Шум', title: 'на цену почти не влияет', img: 'coffee', short: 'нейтрально' };
+    if (s === 'none' || t === 'neu') return { key: 'neu', word: tx('Шум'), title: tx('на цену почти не влияет'), img: 'coffee', short: tx('нейтрально') };
     if (t === 'pos') return s === 'signal'
-      ? { key: 'pos', word: 'Плюс', title: 'скорее хорошая новость', img: 'point', short: 'позитив' }
-      : { key: 'pos weak', word: 'Слабый плюс', title: 'есть повод присмотреться', img: 'tablet', short: 'слабый позитив' };
+      ? { key: 'pos', word: tx('Плюс'), title: tx('скорее хорошая новость'), img: 'point', short: tx('позитив') }
+      : { key: 'pos weak', word: tx('Слабый плюс'), title: tx('есть повод присмотреться'), img: 'tablet', short: tx('слабый позитив') };
     return s === 'signal'
-      ? { key: 'neg', word: 'Минус', title: 'тревожная новость', img: 'arms', short: 'негатив' }
-      : { key: 'neg weak', word: 'Слабый минус', title: 'есть повод насторожиться', img: 'book', short: 'слабый негатив' };
+      ? { key: 'neg', word: tx('Минус'), title: tx('тревожная новость'), img: 'arms', short: tx('негатив') }
+      : { key: 'neg weak', word: tx('Слабый минус'), title: tx('есть повод насторожиться'), img: 'book', short: tx('слабый негатив') };
   }
-  const level = (v, hi, lo) => (v >= hi ? 'высокая' : v >= lo ? 'средняя' : 'низкая');
+  const level = (v, hi, lo) => (v >= hi ? tx('высокая') : v >= lo ? tx('средняя') : tx('низкая'));
   const toneOf = (v) => (v && v.weak ? 'neu' : v && v.tone);
 
   /** Ответ Мани в одну-две фразы */
@@ -87,26 +90,26 @@
     const m = mood(it); const p = [];
     const fails = it.checks.filter((c) => c.cls === 'fail');
     const oks = it.checks.filter((c) => c.cls === 'ok');
-    if (m.key === 'neu') p.push((it.significance || 0) >= 0.6 ? 'Направление по тексту не определить, но событие важное.' : 'Рутинное сообщение — на цену почти не влияет.');
-    else p.push(`Для «${target(it)}» — ${m.key.startsWith('pos') ? 'скорее плюс' : 'скорее минус'}${it.strength === 'weak' ? ', но слабый' : ''}.`);
-    if (fails.length) p.push('Нашёл расхождение — поэтому доверяю выводу меньше.');
-    else if (oks.length) p.push(oks.length === 1 ? 'Цифры перепроверил — сошлось.' : `Перепроверил цифры — ${oks.length} из ${it.checks.length} сошлись.`);
+    if (m.key === 'neu') p.push((it.significance || 0) >= 0.6 ? tx('Направление по тексту не определить, но событие важное.') : tx('Рутинное сообщение — на цену почти не влияет.'));
+    else p.push(tx('Для «{target}» — {dir}{weak}.', { target: target(it), dir: m.key.startsWith('pos') ? tx('скорее плюс') : tx('скорее минус'), weak: it.strength === 'weak' ? tx(', но слабый') : '' }));
+    if (fails.length) p.push(tx('Нашёл расхождение — поэтому доверяю выводу меньше.'));
+    else if (oks.length) p.push(oks.length === 1 ? tx('Цифры перепроверил — сошлось.') : tx('Перепроверил цифры — {a} из {b} сошлись.', { a: oks.length, b: it.checks.length }));
     const c = it.compare;
-    if (c && c.llm && c.base && c.llm.label && toneOf(c.llm) !== toneOf(c.base)) p.push(`С AI-аналитиками вывод другой: «${c.llm.label}».`);
+    if (c && c.llm && c.base && c.llm.label && toneOf(c.llm) !== toneOf(c.base)) p.push(tx('С AI-аналитиками вывод другой: «{x}».', { x: c.llm.label }));
     return p.join(' ');
   }
 
   function oneLineLive(it) {
     const m = mood(it); const p = [];
     const n = it.n_claims || 0;
-    const heads = `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'заголовок' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'заголовка' : 'заголовков'}`;
+    const heads = `${n} ${plural(n, ['заголовок', 'заголовка', 'заголовков'], ['headline', 'headlines'])}`;
     if (it.score == null) {
-      p.push(`По ${it.issuer} в журнале ${heads}, но агент новостей бумагу не оценил — модель пишет «нет данных».`);
+      p.push(tx('По {issuer} в журнале {heads}, но агент новостей бумагу не оценил — модель пишет «нет данных».', { issuer: it.issuer, heads }));
       return p.join(' ');
     }
-    if (m.key === 'neu') p.push('Агент считает, что на цену это почти не влияет.');
-    else p.push(`Для «${target(it)}» — ${m.key.startsWith('pos') ? 'скорее плюс' : 'скорее минус'}${it.strength === 'weak' ? ', но слабый' : ''}.`);
-    const why = it.explain.find((e) => e.kind === 'вывод');
+    if (m.key === 'neu') p.push(tx('Агент считает, что на цену это почти не влияет.'));
+    else p.push(tx('Для «{target}» — {dir}{weak}.', { target: target(it), dir: m.key.startsWith('pos') ? tx('скорее плюс') : tx('скорее минус'), weak: it.strength === 'weak' ? tx(', но слабый') : '' }));
+    const why = it.explain.find(isOut);
     if (why && why.text) p.push(noRefs(why.text).replace(/\.?$/, '.'));
     return p.join(' ');
   }
@@ -114,10 +117,10 @@
   /** Самое важное в разборе */
   function keyPoint(it) {
     const f = it.checks.find((c) => c.cls === 'fail');
-    if (f) return { kind: 'fail', label: 'Расхождение', title: f.title, text: f.text, tab: 'checks' };
+    if (f) return { kind: 'fail', label: tx('Расхождение'), title: f.title, text: f.text, tab: 'checks' };
     const w = it.checks.find((c) => c.cls === 'warn');
-    if (w) return { kind: 'warn', label: 'Оговорка', title: w.title, text: w.text, tab: 'checks' };
-    if (it.watch.length) return { kind: 'info', label: 'Что дальше', title: '', text: it.watch[0], tab: 'checks' };
+    if (w) return { kind: 'warn', label: tx('Оговорка'), title: w.title, text: w.text, tab: 'checks' };
+    if (it.watch.length) return { kind: 'info', label: tx('Что дальше'), title: '', text: it.watch[0], tab: 'checks' };
     return null;
   }
 
@@ -136,7 +139,7 @@
       chip(pos, pos && mk(pos), 'c1'),
       chip(neg, neg && mk(neg), 'c2'),
       chip(failIt, failIt && `<i class="ico fail">✕</i><b>${esc(failIt.checks.find((c) => c.cls === 'fail').title)}</b><small>${esc(shortName(failIt.issuer))}</small>`, 'c3'),
-      chip(okIt, okIt && `<i class="ico ok">✓</i><b>${esc(okIt.checks.find((c) => c.cls === 'ok').title)}</b><small>сошлось</small>`, 'c4'),
+      chip(okIt, okIt && `<i class="ico ok">✓</i><b>${esc(okIt.checks.find((c) => c.cls === 'ok').title)}</b><small>${tx('сошлось')}</small>`, 'c4'),
     ].join('');
 
     if (PRICES) { renderTape(true); return; }            // есть котировки — лента цен, иначе сигналы отчёта
@@ -159,13 +162,13 @@
   /* ---------- бегущая лента цен: первый эшелон (MOEXBC) из T-Invest или ISS Мосбиржи ---------- */
   let PRICES = null;
   const dec = (x) => (x < 1 ? 4 : x < 10000 ? 2 : 0);
-  const priceFmt = (x) => x.toLocaleString('ru-RU', { minimumFractionDigits: dec(x), maximumFractionDigits: dec(x) });
-  const chgFmt = (c) => (c == null ? '' : `${c > 0 ? '+' : c < 0 ? '−' : ''}${Math.abs(c).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`);
+  const priceFmt = (x) => x.toLocaleString(LOC, { minimumFractionDigits: dec(x), maximumFractionDigits: dec(x) });
+  const chgFmt = (c) => (c == null ? '' : `${c > 0 ? '+' : c < 0 ? '−' : ''}${Math.abs(c).toLocaleString(LOC, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`);
   function tapeItem(p) {
     const tone = p.change == null || p.change === 0 ? 'neu' : p.change > 0 ? 'pos' : 'neg';
     const open = R && R.byId && R.byId[p.ticker];          // по бумаге есть разбор Мани — клик открывает его
     const tag = open ? 'button' : 'span';
-    const attrs = open ? ` type="button" data-id="${esc(p.ticker)}" title="${esc(p.name)} — открыть разбор Мани"` : ` title="${esc(p.name)}"`;
+    const attrs = open ? ` type="button" data-id="${esc(p.ticker)}" title="${esc(tx('{name} — открыть разбор Мани', { name: p.name }))}"` : ` title="${esc(p.name)}"`;
     return `<${tag} class="tk-i ${tone}${open ? ' has' : ''}" data-tk="${esc(p.ticker)}" data-last="${p.last}"${attrs}><b>${esc(p.ticker)}</b>`
       + `<span class="num">${priceFmt(p.last)}&nbsp;₽</span><i>${tone === 'pos' ? '▲' : tone === 'neg' ? '▼' : '•'}</i><small>${chgFmt(p.change)}</small></${tag}>`;
   }
@@ -182,12 +185,12 @@
       }));
       return;
     }
-    const src = P.source === 'T-Invest' ? 'T-Invest' : 'Мосбиржа · −15 мин';
-    const row = `<span class="tk-src">Первый эшелон · ${esc(src)}</span>` + P.items.map(tapeItem).join('');
+    const src = P.source === 'T-Invest' ? 'T-Invest' : tx('Мосбиржа · −15 мин');
+    const row = `<span class="tk-src">${esc(tx('Первый эшелон'))} · ${esc(src)}</span>` + P.items.map(tapeItem).join('');
     track.innerHTML = `<div class="ticker__set">${row}</div><div class="ticker__set" aria-hidden="true">${row}</div>`;
     track.dataset.key = key;
     track.style.setProperty('--dur', Math.max(30, P.items.length * 3.4) + 's');
-    $('#ticker').setAttribute('aria-label', `Котировки первого эшелона, источник ${src}`);
+    $('#ticker').setAttribute('aria-label', tx('Котировки первого эшелона, источник {src}', { src }));
   }
   async function pollPrices() {
     const P = await window.HMReport.loadPrices();
@@ -224,22 +227,24 @@
     if (isLive()) {
       scenarios = liveScenarios();
       renderTicketList();
-      $('.rail__t').textContent = `Разборы агента · ${scenarios.length}`;
+      $('.rail__t').textContent = tx('Разборы агента · {n}', { n: scenarios.length });
       const L = R.live;
-      $('#demoAside').innerHTML = `Живая лента: <b>агент оценил ${R.items.length} ${R.items.length % 10 === 1 && R.items.length % 100 !== 11 ? 'бумагу' : [2, 3, 4].includes(R.items.length % 10) && ![12, 13, 14].includes(R.items.length % 100) ? 'бумаги' : 'бумаг'}</b> · ${L.items_total} заголовков за ${L.window_h} ч из ${L.sources_active} источников · обновлено в ${hm(L.updated_at)}`;
+      $('#demoAside').innerHTML = tx('Живая лента: <b>агент оценил {n} {papers}</b> · {total} заголовков за {h} ч из {src} источников · обновлено в {time}', {
+        n: R.items.length, papers: plural(R.items.length, ['бумагу', 'бумаги', 'бумаг'], ['stock', 'stocks']),
+        total: L.items_total, h: L.window_h, src: L.sources_active, time: hm(L.updated_at) });
       return;
     }
     const list = SCENARIOS.filter((s) => R.byId[s.id]);
     scenarios = list.length ? list : R.items.slice().sort((a, b) => (b.significance || 0) - (a.significance || 0)).slice(0, 8).map((it) => ({ id: it.id, hook: it.kind }));
     renderTicketList();
-    $('#demoAside').innerHTML = `Настоящие раскрытия из отчёта — <b>${R.items.length} новостей</b>. Выберите пример или найдите свою.`;
+    $('#demoAside').innerHTML = tx('Настоящие раскрытия из отчёта — <b>{n} новостей</b>. Выберите пример или найдите свою.', { n: R.items.length });
   }
   function renderTicketList() {
     $('#tickets').innerHTML = scenarios.map((sc) => {
       const it = R.byId[sc.id]; const m = mood(it);
       return `<button type="button" class="ticket ${m.key}" data-id="${esc(it.id)}">
         <span class="ticket__b">${esc(badge(it))}</span>
-        <span class="ticket__body"><b>${esc(sc.hook)}</b><small>${esc(shortName(it.issuer))} · ${esc(it.analyzed_at ? 'разбор в ' + it.analyzed_at : it.time ? it.date.slice(0, 5) + ' ' + it.time : it.date)}</small></span>
+        <span class="ticket__body"><b>${esc(sc.hook)}</b><small>${esc(shortName(it.issuer))} · ${esc(it.analyzed_at ? tx('разбор в {at}', { at: it.analyzed_at }) : it.time ? it.date.slice(0, 5) + ' ' + it.time : it.date)}</small></span>
         <span class="ticket__s num">${fmt(it.score, { sign: true })}</span>
       </button>`;
     }).join('');
@@ -281,8 +286,8 @@
         <i class="dot ${toneOf({ tone: it.verdict.tone, weak: it.strength === 'none' })}"></i>
         <span><b>${esc(shortName(it.issuer))}</b><small>${esc(clip(it.kind, 40))} · ${esc(it.date)}</small></span>
         <em class="num">${fmt(it.score, { sign: true })}</em></li>`).join('')
-      : (isLive() ? '<li class="empty">Такой бумаги в ленте пока нет. Попробуйте «ВТБ», «Сбер» или «прибыль».</li>'
-        : '<li class="empty">Такой новости в отчёте нет. Попробуйте «Роснефть», «облигации» или «дивиденды».</li>');
+      : (isLive() ? `<li class="empty">${tx('Такой бумаги в ленте пока нет. Попробуйте «ВТБ», «Сбер» или «прибыль».')}</li>`
+        : `<li class="empty">${tx('Такой новости в отчёте нет. Попробуйте «Роснефть», «облигации» или «дивиденды».')}</li>`);
   }
   q.addEventListener('input', renderSuggest);
   q.addEventListener('focus', () => { if (q.value.trim()) renderSuggest(); });
@@ -301,21 +306,22 @@
 
   /* ---------- ответ Мани ---------- */
   const STEP_HINT = [
-    ['сборщик', 'Смотрю журнал сборщика новостей'],
-    ['журнал', 'Склеиваю записи по claim_id'],
-    ['отбор', 'Отбираю самые важные и свежие заголовки'],
-    ['агент', 'Спрашиваю агента новостей'],
-    ['схем', 'Проверяю ответ агента по схеме'],
-    ['сверк', 'Сверяю с прошлой оценкой'],
-    ['факты', 'Вынимаю факты и цифры из текста'],
-    ['правила', 'Применяю правила для этого вида события'],
-    ['проверки', 'Пересчитываю арифметику, сверяю даты'],
-    ['истори', 'Сравниваю с прошлыми сообщениями эмитента'],
-    ['аналитик', 'Спрашиваю AI-аналитиков'],
-    ['калибр', 'Считаю оценку формулой'],
-    ['карточк', 'Собираю ответ'],
+    ['сборщик', tx('Смотрю журнал сборщика новостей')],
+    ['журнал', tx('Склеиваю записи по claim_id')],
+    ['отбор', tx('Отбираю самые важные и свежие заголовки')],
+    ['агент', tx('Спрашиваю агента новостей')],
+    ['схем', tx('Проверяю ответ агента по схеме')],
+    ['сверк', tx('Сверяю с прошлой оценкой')],
+    ['факты', tx('Вынимаю факты и цифры из текста')],
+    ['правила', tx('Применяю правила для этого вида события')],
+    ['проверки', tx('Пересчитываю арифметику, сверяю даты')],
+    ['истори', tx('Сравниваю с прошлыми сообщениями эмитента')],
+    ['аналитик', tx('Спрашиваю AI-аналитиков')],
+    ['калибр', tx('Считаю оценку формулой')],
+    ['карточк', tx('Собираю ответ')],
   ];
-  const hintFor = (label) => { const h = STEP_HINT.find(([k]) => label.toLowerCase().includes(k)); return h ? h[1] : label; };
+  /** шаг сопоставляется по русскому названию (key), подпись — на языке страницы */
+  const hintFor = (step) => { const h = STEP_HINT.find(([k]) => (step.key || step.label).toLowerCase().includes(k)); return h ? h[1] : step.label; };
 
   async function ask(id, opts) {
     const it = R.byId[id]; if (!it) return;
@@ -331,7 +337,7 @@
     stage.classList.add('busy');
     let scan = $('.scan', stage);
     if (!scan) {
-      stage.insertAdjacentHTML('beforeend', `<div class="scan"><img src="assets/img/mani/laptop.webp" alt="" width="900" height="575"><div class="scan__t"><b>Мани читает…</b><span id="scanMsg"></span></div><ol class="scan__bar">${steps.map(() => '<li></li>').join('')}</ol></div>`);
+      stage.insertAdjacentHTML('beforeend', `<div class="scan"><img src="${BASE}assets/img/mani/laptop.webp" alt="" width="900" height="575"><div class="scan__t"><b>${tx('Мани читает…')}</b><span id="scanMsg"></span></div><ol class="scan__bar">${steps.map(() => '<li></li>').join('')}</ol></div>`);
       scan = $('.scan', stage);
     }
     window.dispatchEvent(new CustomEvent('mani:thinking', { detail: { id, issuer: shortName(it.issuer), silent: !!(opts && opts.silent) } }));
@@ -340,8 +346,8 @@
     for (let i = 0; i < steps.length; i++) {
       if (tok !== runToken) return;
       const skip = steps[i].type === 'opt' && !it.opinions.length;
-      const skipMsg = it.set === 'live' ? 'Агент не оценил бумагу — «нет данных»' : 'Без AI-аналитиков — хватает правил';
-      $('#scanMsg', scan).textContent = `${i + 1}/${steps.length} · ${skip ? skipMsg : hintFor(steps[i].label)}`;
+      const skipMsg = it.set === 'live' ? tx('Агент не оценил бумагу — «нет данных»') : tx('Без AI-аналитиков — хватает правил');
+      $('#scanMsg', scan).textContent = `${i + 1}/${steps.length} · ${skip ? skipMsg : hintFor(steps[i])}`;
       bars[i].className = skip ? 'skip' : 'done';
       await wait(170);
     }
@@ -378,33 +384,34 @@
 
   const ICON = { ok: '✓', warn: '!', fail: '✕', info: 'i' };
   function tabsFor(it) {
+    const tr = window.HMI18N.t;
     const t = [];
-    if (it.checks.length || it.watch.length) t.push(['checks', 'Проверки', it.checks.length || '']);
+    if (it.checks.length || it.watch.length) t.push(['checks', tr('Проверки'), it.checks.length || '']);
     const live = it.set === 'live';
-    if (it.explain.length) t.push(['facts', live ? 'Что пишут' : 'Что в тексте', it.explain.filter((e) => e.kind !== 'вывод').length]);
-    if (it.opinions.length) t.push(['ai', live ? 'Агент новостей' : 'Спор AI-аналитиков', it.opinions.length]);
-    if (it.compare && it.compare.label) t.push(['cmp', 'Сверка с банком', '']);
+    if (it.explain.length) t.push(['facts', live ? tr('Что пишут') : tr('Что в тексте'), it.explain.filter((e) => !isOut(e)).length]);
+    if (it.opinions.length) t.push(['ai', live ? tr('Агент новостей') : tr('Спор AI-аналитиков'), it.opinions.length]);
+    if (it.compare && it.compare.label) t.push(['cmp', tr('Сверка с банком'), '']);
     return t;
   }
   function paneHTML(it, tab) {
     if (tab === 'checks') {
       return `${it.checks.length ? `<ul class="checks">${it.checks.map((ch) => `<li class="${ch.cls}"><i>${ICON[ch.cls]}</i><div><b>${esc(ch.title)}</b><p>${esc(ch.text)}</p></div><span>${esc(ch.status)}</span></li>`).join('')}</ul>` : ''}
-        ${it.watch.length ? `<div class="watch"><b>Что смотреть дальше</b>${it.watch.map((w) => `<p>${esc(w)}</p>`).join('')}</div>` : ''}`;
+        ${it.watch.length ? `<div class="watch"><b>${tx('Что смотреть дальше')}</b>${it.watch.map((w) => `<p>${esc(w)}</p>`).join('')}</div>` : ''}`;
     }
     if (tab === 'facts') {
-      return `<ul class="facts">${it.explain.map((e) => `<li class="${e.kind === 'вывод' ? 'out' : ''}${e.cited ? ' cited' : ''}"><span>${esc(e.kind)}</span><p>${esc(it.set === 'live' ? noRefs(e.text) : e.text)}${e.quotes.length ? `<br>${e.quotes.map((x) => `<mark>«${esc(x)}»</mark>`).join(' ')}` : ''}${e.url ? `<a class="src" href="${safeUrl(e.url)}" target="_blank" rel="noopener">${esc(e.time || '')}${e.cited ? ' · учёл агент' : ''} · открыть ↗</a>` : ''}</p></li>`).join('')}</ul>`;
+      return `<ul class="facts">${it.explain.map((e) => `<li class="${isOut(e) ? 'out' : ''}${e.cited ? ' cited' : ''}"><span>${esc(isOut(e) ? tx('вывод') : e.kind)}</span><p>${esc(it.set === 'live' ? noRefs(e.text) : e.text)}${e.quotes.length ? `<br>${e.quotes.map((x) => `<mark>«${esc(x)}»</mark>`).join(' ')}` : ''}${e.url ? `<a class="src" href="${safeUrl(e.url)}" target="_blank" rel="noopener">${esc(e.time || '')}${e.cited ? ' · ' + tx('учёл агент') : ''} · ${tx('открыть')} ↗</a>` : ''}</p></li>`).join('')}</ul>`;
     }
     if (tab === 'ai') {
       return `<div class="ops">${it.opinions.map((o) => `<div class="op">
         <div class="op__h"><b>${esc(o.role)}</b><code>${esc(o.model)}</code></div>
-        <div class="op__scale" title="влияние ${o.impact} по шкале от −2 до +2">${[-2, -1, 0, 1, 2].map((v) => `<i class="${v === o.impact ? (v > 0 ? 'p' : v < 0 ? 'n' : 'z') : ''}"></i>`).join('')}<span class="num">${o.impact > 0 ? '+' : ''}${o.impact}</span></div>
+        <div class="op__scale" title="${tx('влияние {v} по шкале от −2 до +2', { v: o.impact })}">${[-2, -1, 0, 1, 2].map((v) => `<i class="${v === o.impact ? (v > 0 ? 'p' : v < 0 ? 'n' : 'z') : ''}"></i>`).join('')}<span class="num">${o.impact > 0 ? '+' : ''}${o.impact}</span></div>
         <p>${esc(it.set === 'live' ? noRefs(o.text) : o.text)}</p></div>`).join('')}</div>
-        <p class="pane__note">${it.set === 'live' ? 'Агент новостей оценивает бумагу по заголовкам за последние часы. Шкала от −2 до +2.' : 'Модели дают доводы, итог считает формула с учётом их неуверенности.'}</p>`;
+        <p class="pane__note">${it.set === 'live' ? tx('Агент новостей оценивает бумагу по заголовкам за последние часы. Шкала от −2 до +2.') : tx('Модели дают доводы, итог считает формула с учётом их неуверенности.')}</p>`;
     }
     if (tab === 'cmp') {
       const c = it.compare;
-      const cell = (name, v) => v && v.label ? `<div class="cmp__c ${v.hit === true ? 'hit' : v.hit === false ? 'miss' : 'ref'}"><small>${name}</small><b class="tone ${toneOf(v)}">${esc(v.label)}</b><span>${v.hit === true ? '✓ совпало' : v.hit === false ? '✕ не совпало' : 'эталон'}</span></div>` : '';
-      return `<div class="cmp">${cell('Аналитик банка', c.label)}${cell('Мани', c.base)}${cell('Мани + AI', c.llm)}</div>
+      const cell = (name, v) => v && v.label ? `<div class="cmp__c ${v.hit === true ? 'hit' : v.hit === false ? 'miss' : 'ref'}"><small>${name}</small><b class="tone ${toneOf(v)}">${esc(v.label)}</b><span>${v.hit === true ? '✓ ' + tx('совпало') : v.hit === false ? '✕ ' + tx('не совпало') : tx('эталон')}</span></div>` : '';
+      return `<div class="cmp">${cell(tx('Аналитик банка'), c.label)}${cell(tx('Мани'), c.base)}${cell(tx('Мани + AI'), c.llm)}</div>
         ${it.example && it.example.note ? `<p class="pane__note">${esc(it.example.note)}</p>` : ''}`;
     }
     return '';
@@ -418,34 +425,34 @@
       <div class="st-head">
         <span class="st-id">${esc(it.id)}</span>
         <span class="st-what">${esc(shortName(it.issuer))} · ${esc(clip(it.kind, 60))} · ${esc(it.date)}${it.time ? ' ' + esc(it.time) : ''}</span>
-        <button type="button" class="st-link" data-act="link" title="Скопировать ссылку на разбор">ссылка ↗</button>
+        <button type="button" class="st-link" data-act="link" title="${tx('Скопировать ссылку на разбор')}">${tx('ссылка')} ↗</button>
       </div>
       ${it.title && it.set === 'live' ? `<p class="st-title">${it.links && it.links[0] ? `<a href="${safeUrl(it.links[0].url)}" target="_blank" rel="noopener">${esc(it.title)}</a>` : esc(it.title)}<small>${esc((it.sources || []).join(' · '))}</small></p>` : ''}
 
       <div class="verdict ${m.key}">
-        <img class="verdict__mani" src="assets/img/mani/${m.img}.webp" alt="Мани">
+        <img class="verdict__mani" src="${BASE}assets/img/mani/${m.img}.webp" alt="${tx('Мани')}">
         <div class="verdict__txt">
-          <p class="caps">Вердикт Мани · ${esc(clip(target(it), 48))}${it.analyzed_at ? ` · разбор в ${esc(it.analyzed_at)}` : ''}</p>
+          <p class="caps">${tx('Вердикт Мани')} · ${esc(clip(target(it), 48))}${it.analyzed_at ? ` · ${esc(tx('разбор в {at}', { at: it.analyzed_at }))}` : ''}</p>
           <h3><span class="vw">${m.word}</span> <span class="vt">— ${m.title}</span></h3>
           <p>${esc(oneLine(it))}</p>
         </div>
       </div>
 
       <div class="meters">
-        <div class="meter meter--g ${m.key}" title="Оценка влияния на цену: от −1 до +1. Около нуля — шум.">
+        <div class="meter meter--g ${m.key}" title="${tx('Оценка влияния на цену: от −1 до +1. Около нуля — шум.')}">
           ${gauge(it.score)}
-          <b class="num">${fmt(it.score, { sign: true })}</b><span>влияние на цену</span>
+          <b class="num">${fmt(it.score, { sign: true })}</b><span>${tx('влияние на цену')}</span>
         </div>
-        <div class="meter" title="Насколько Мани уверен в выводе: сошлись ли проверки.">
+        <div class="meter" title="${tx('Насколько Мани уверен в выводе: сошлись ли проверки.')}">
           <div class="meter__r">${ring(conf)}<b class="num">${fmt(it.confidence)}</b></div>
-          <span>уверенность</span><small>${it.confidence == null ? 'нет данных' : level(conf, 0.7, 0.45)}</small>
+          <span>${tx('уверенность')}</span><small>${it.confidence == null ? tx('нет данных') : level(conf, 0.7, 0.45)}</small>
         </div>
-        ${live ? `<div class="meter" title="Сколько заголовков по бумаге за последние часы.">
+        ${live ? `<div class="meter" title="${tx('Сколько заголовков по бумаге за последние часы.')}">
           <div class="meter__r">${ring(Math.min(1, nc / 10))}<b class="num">${nc}</b></div>
-          <span>заголовков</span><small>${esc((it.sources || []).length + ' ист.')}</small>
-        </div>` : `<div class="meter" title="Насколько событие важно для эмитента.">
+          <span>${plural(nc, ['заголовок', 'заголовка', 'заголовков'], ['headline', 'headlines'])}</span><small>${esc(tx('{n} ист.', { n: (it.sources || []).length }))}</small>
+        </div>` : `<div class="meter" title="${tx('Насколько событие важно для эмитента.')}">
           <div class="meter__r">${ring(sig)}<b class="num">${fmt(it.significance)}</b></div>
-          <span>значимость</span><small>${level(sig, 0.6, 0.25)}</small>
+          <span>${tx('значимость')}</span><small>${level(sig, 0.6, 0.25)}</small>
         </div>`}
       </div>
 
@@ -455,13 +462,13 @@
       <div class="pane" id="pane">${paneHTML(it, tabs[0][0])}</div>` : ''}
 
       <div class="decide">
-        <span>Ваше решение</span>
+        <span>${tx('Ваше решение')}</span>
         <div class="decide__btns">
-          <button type="button" data-d="act">Действую</button>
-          <button type="button" data-d="wait">Отложу</button>
-          <button type="button" data-d="skip">Не буду</button>
+          <button type="button" data-d="act">${DEC.act}</button>
+          <button type="button" data-d="wait">${DEC.wait}</button>
+          <button type="button" data-d="skip">${DEC.skip}</button>
         </div>
-        <small>Мани не совершает сделок — выбор уйдёт в журнал</small>
+        <small>${tx('Мани не совершает сделок — выбор уйдёт в журнал')}</small>
       </div>`;
   }
 
@@ -479,12 +486,12 @@
     const l = e.target.closest('[data-act="link"]');
     if (l && current) {
       const url = location.href.split('#')[0] + '#' + current.id;
-      (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast('Ссылка на разбор скопирована'), () => toast(url));
+      (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast(tx('Ссылка на разбор скопирована')), () => toast(url));
     }
   });
 
   /* ---------- журнал решений ---------- */
-  const DEC = { act: 'Действую', wait: 'Отложу', skip: 'Не буду' };
+  const DEC = { act: tx('Действую'), wait: tx('Отложу'), skip: tx('Не буду') };
   let journal = store.get('journal', []);
   function decide(it, d) {
     journal.unshift({ id: it.id, issuer: shortName(it.issuer), kind: it.kind, mood: mood(it).short, score: it.score, conf: it.confidence, d, at: Date.now() });
@@ -492,14 +499,14 @@
     store.set('journal', journal);
     renderJournal();
     $$('.decide [data-d]').forEach((b) => b.classList.toggle('chosen', b.dataset.d === d));
-    toast(`В журнале: «${DEC[d]}» · ${it.id}`);
+    toast(tx('В журнале: «{d}» · {id}', { d: DEC[d], id: it.id }));
     window.dispatchEvent(new CustomEvent('mani:decide', { detail: { d, id: it.id } }));
     const btn = $('#journalBtn'); btn.classList.remove('bump'); void btn.offsetWidth; btn.classList.add('bump');
   }
   function renderJournal() {
     $('#journalCount').textContent = journal.length;
-    $('#jlist').innerHTML = journal.length ? journal.map((j) => `<li><span class="jd ${j.d}">${DEC[j.d]}</span><div><b>${esc(j.id)} · ${esc(j.issuer)}</b><span>${esc(j.kind)}</span><small>Мани: ${esc(j.mood)} ${fmt(j.score, { sign: true })} · уверенность ${fmt(j.conf)} · ${new Date(j.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small></div></li>`).join('')
-      : '<li class="empty"><img src="assets/img/mani/zen.webp" alt="" width="900" height="780">Пока пусто. Примите решение по любой новости — оно появится здесь.</li>';
+    $('#jlist').innerHTML = journal.length ? journal.map((j) => `<li><span class="jd ${j.d}">${DEC[j.d]}</span><div><b>${esc(j.id)} · ${esc(j.issuer)}</b><span>${esc(j.kind)}</span><small>${tx('Мани')}: ${esc(j.mood)} ${fmt(j.score, { sign: true })} · ${tx('уверенность')} ${fmt(j.conf)} · ${new Date(j.at).toLocaleString(LOC, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small></div></li>`).join('')
+      : `<li class="empty"><img src="${BASE}assets/img/mani/zen.webp" alt="" width="900" height="780">${tx('Пока пусто. Примите решение по любой новости — оно появится здесь.')}</li>`;
   }
   function drawer(open) { $('#drawer').hidden = !open; $('#scrim').hidden = !open; }
   $('#journalBtn').addEventListener('click', () => drawer(true));
@@ -513,14 +520,14 @@
      ТОЧНОСТЬ: крупные цифры, график, разборы
      ============================================================ */
   function renderTrust() {
-    $('#trustAside').textContent = `${R.blind.items.length} раскрытий, которых Мани раньше не видел. Ответы сверили с разметкой аналитика банка.`;
+    $('#trustAside').textContent = tx('{n} раскрытий, которых Мани раньше не видел. Ответы сверили с разметкой аналитика банка.', { n: R.blind.items.length });
     $('#bento').innerHTML = R.brief.map((b, i) => {
       const cap = b.text.split(/[:.]/)[0];
       return `<div class="tile ${i === 1 ? 'tile--lime' : ''}" data-reveal style="--d:${i * 0.08}s" title="${esc(b.text)}"><b class="num">${esc(b.value)}</b><span>${esc(cap)}</span></div>`;
     }).join('');
 
     $('#vbars').innerHTML = R.blind.bars.map((b) => `
-      <div class="vb ${b.main ? 'main' : b.second ? 'second' : 'base'}" data-tip="${esc(b.title)}: ${b.hits} из ${b.total} · интервал ${pct(b.lo)}–${pct(b.hi)}">
+      <div class="vb ${b.main ? 'main' : b.second ? 'second' : 'base'}" data-tip="${esc(tx('{title}: {hits} из {total} · интервал {lo}–{hi}', { title: b.title, hits: b.hits, total: b.total, lo: pct(b.lo), hi: pct(b.hi) }))}">
         <div class="vb__col">
           <span class="vb__bar" style="--h:${(b.rate || 0) * 100}%"></span>
           <b class="vb__v num" style="bottom:${Math.max(b.rate || 0, b.hi || 0) * 100}%">${pct(b.rate)}</b>
@@ -529,9 +536,11 @@
         <span class="vb__l">${esc(b.title)}</span>
       </div>`).join('');
 
-    const tag = (t) => /^Верный/.test(t) ? ['ok', '✓ верно'] : /^Аналитики/.test(t) ? ['ai', '★ AI помогли'] : ['miss', '✕ ошибка'];
+    /** тип примера: в английском отчёте он посчитан заранее (e.tag), в русском — по началу заголовка */
+    const tag = (e) => { const k = e.tag || (/^Верный/.test(e.title || '') ? 'ok' : /^Аналитики/.test(e.title || '') ? 'ai' : 'miss');
+      return [k, k === 'ok' ? '✓ ' + tx('верно') : k === 'ai' ? '★ ' + tx('AI помогли') : '✕ ' + tx('ошибка')]; };
     $('#cases').innerHTML = R.blind.examples.map((e) => {
-      const [cls, lbl] = tag(e.title || '');
+      const [cls, lbl] = tag(e);
       const cut = (e.title || '').indexOf(':');
       const head = cut > -1 ? e.title.slice(cut + 1).trim() : (e.title || '');
       return `<button type="button" class="case ${cls}" data-id="${esc(e.id)}"><span class="case__tag">${lbl}</span><b>${esc(head.charAt(0).toUpperCase() + head.slice(1))}</b><small>${esc(shortName(e.issuer))} · ${esc(e.id)} <i>→</i></small></button>`;
@@ -555,28 +564,28 @@
      КАК УСТРОЕН
      ============================================================ */
   const HELP = [
-    ['сборщик', 'Ленты, сайты и Telegram — раз в 1–3 минуты, Telegram подпиской за секунды'],
-    ['журнал', 'Каждая запись — один claim_id: повторы из разных журналов склеиваются'],
-    ['отбор', 'Из потока выбираются самые важные и свежие заголовки, служебные сообщения отсеиваются'],
-    ['агент', 'LLM на открытой модели оценивает бумаги от −1 до +1, уверенность и почему'],
-    ['схем', 'Ответ проверяется по схеме, при ошибке — один повтор, иначе «нет данных»'],
-    ['сверк', 'Если оценка резко развернулась без новой новости, это помечается'],
-    ['факты', 'Вынимает факты и цифры, помечает, где они в тексте'],
-    ['правила', 'Свои правила для купона, сделки, решения СД, дефолта, рейтинга'],
-    ['проверки', 'Пересчитывает арифметику, сверяет даты и контрагентов'],
-    ['истори', 'Сравнивает с прошлыми сообщениями того же эмитента'],
-    ['аналитик', 'AI-аналитики на открытых моделях спорят и дают доводы'],
-    ['калибр', 'Формула сводит всё в оценку — не языковая модель'],
-    ['карточк', 'На что влияет, в какую сторону, насколько важно и почему'],
+    ['сборщик', tx('Ленты, сайты и Telegram — раз в 1–3 минуты, Telegram подпиской за секунды')],
+    ['журнал', tx('Каждая запись — один claim_id: повторы из разных журналов склеиваются')],
+    ['отбор', tx('Из потока выбираются самые важные и свежие заголовки, служебные сообщения отсеиваются')],
+    ['агент', tx('LLM на открытой модели оценивает бумаги от −1 до +1, уверенность и почему')],
+    ['схем', tx('Ответ проверяется по схеме, при ошибке — один повтор, иначе «нет данных»')],
+    ['сверк', tx('Если оценка резко развернулась без новой новости, это помечается')],
+    ['факты', tx('Вынимает факты и цифры, помечает, где они в тексте')],
+    ['правила', tx('Свои правила для купона, сделки, решения СД, дефолта, рейтинга')],
+    ['проверки', tx('Пересчитывает арифметику, сверяет даты и контрагентов')],
+    ['истори', tx('Сравнивает с прошлыми сообщениями того же эмитента')],
+    ['аналитик', tx('AI-аналитики на открытых моделях спорят и дают доводы')],
+    ['калибр', tx('Формула сводит всё в оценку — не языковая модель')],
+    ['карточк', tx('На что влияет, в какую сторону, насколько важно и почему')],
   ];
   const HOW_ASIDE = $('#how .sec-head__aside').innerHTML;
   function renderHow() {
     $('#how .sec-head__aside').innerHTML = isLive()
-      ? 'Живая лента: новости собираются и оцениваются автоматически. Сделок Мани не совершает.'
+      ? tx('Живая лента: новости собираются и оцениваются автоматически. Сделок Мани не совершает.')
       : HOW_ASIDE;
     $('#steps').innerHTML = R.method.flow.map((s, i) => {
-      const h = HELP.find(([k]) => s.label.toLowerCase().includes(k));
-      return `<li class="step ${s.type}" data-reveal style="--d:${i * 0.05}s"><span class="step__n num">${String(i + 1).padStart(2, '0')}</span><b>${esc(s.label)}</b><p>${h ? h[1] : ''}</p><em>${s.type === 'opt' ? 'опционально' : s.type === 'core' ? 'ядро' : ''}</em></li>`;
+      const h = HELP.find(([k]) => (s.key || s.label).toLowerCase().includes(k));
+      return `<li class="step ${s.type}" data-reveal style="--d:${i * 0.05}s"><span class="step__n num">${String(i + 1).padStart(2, '0')}</span><b>${esc(s.label)}</b><p>${h ? h[1] : ''}</p><em>${s.type === 'opt' ? tx('опционально') : s.type === 'core' ? tx('ядро') : ''}</em></li>`;
     }).join('');
     observeReveal();
   }
@@ -627,9 +636,9 @@
     if (!refresh) { renderTrust(); renderHow(); }
     $('#srcBtn').textContent = R.origin.source.split('/').pop();
     $('#footNote').textContent = isLive()
-      ? 'Данные — живая лента новостей Honey Money и биржевые цены. Оценки получены автоматически и не являются инвестиционной рекомендацией.'
+      ? tx('Данные — живая лента новостей Honey Money и биржевые цены. Оценки получены автоматически и не являются инвестиционной рекомендацией.')
       : (R.footer || FOOT);
-    $('.hero .live').innerHTML = isLive() ? `<i></i>живая лента · ${hm(R.live.updated_at)}` : LIVE_BADGE;
+    $('.hero .live').innerHTML = isLive() ? `<i></i>${tx('живая лента')} · ${hm(R.live.updated_at)}` : LIVE_BADGE;
     window.dispatchEvent(new CustomEvent('hm:report'));
     if (refresh) {
       if (current && R.byId[current.id]) current = R.byId[current.id];
@@ -643,8 +652,9 @@
     if (!R) return;
     if (isLive()) {
       const L = R.live;
-      toast(`Журнал модели: ${L.items_total} заголовков за ${L.window_h} ч → ${R.items.length} бумаг. ${L.llm.enabled ? `Агент новостей — раз в ${Math.round(L.cycle_s / 60)} мин.` : 'Ключа LLM нет — «нет данных».'}`);
-    } else toast(`${R.origin.source}: ${R.original.items.length} новостей исходного набора и ${R.blind.items.length} слепого теста`);
+      toast(tx('Журнал: {total} заголовков за {h} ч → {n} бумаг.', { total: L.items_total, h: L.window_h, n: R.items.length }) + ' '
+        + (L.llm.enabled ? tx('Агент новостей — раз в {m} мин.', { m: Math.round(L.cycle_s / 60) }) : tx('Ключа LLM нет — «нет данных».')));
+    } else toast(tx('{src}: {a} новостей исходного набора и {b} слепого теста', { src: R.origin.source, a: R.original.items.length, b: R.blind.items.length }));
   });
 
   /* ---------- живая лента: подключение и обновление ---------- */
@@ -663,14 +673,14 @@
       const next = window.HMReport.withLive(base, L);
       if (!wasLive) {
         setReport(next);
-        if (!first) toast(`Подключил живую ленту модели: ${next.items.length} бумаг в новостях`);
+        if (!first) toast(tx('Подключил живую ленту: {n} бумаг с разбором', { n: next.items.length }));
       } else {
         setReport(next, { refresh: true });
         // новая бумага в журнале или новая оценка агента
         const fresh = next.items.filter((it) => !before.has(it.id) || before.get(it.id) !== it.score);
         if (fresh.length) {
           const f = fresh[0];
-          toast(f.score != null && before.has(f.id) ? `Агент обновил оценку: ${f.ticker} ${fmt(f.score, { sign: true })}` : `Новое по ${f.ticker}: ${clip(f.title, 60)}`);
+          toast(f.score != null && before.has(f.id) ? tx('Агент обновил оценку: {tk} {s}', { tk: f.ticker, s: fmt(f.score, { sign: true }) }) : tx('Новое по {tk}: {title}', { tk: f.ticker, title: clip(f.title, 60) }));
           window.dispatchEvent(new CustomEvent('mani:news', { detail: { id: fresh[0].id, n: fresh.length } }));
         }
       }
@@ -685,9 +695,9 @@
       liveFile = true;
       history.replaceState(null, '', location.pathname + location.search);
       setReport(rep);
-      toast(`Загружен «${f.name}»: ${rep.items.length} новостей`);
+      toast(tx('Загружен «{f}»: {n} новостей', { f: f.name, n: rep.items.length }));
       $('#demo').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
-    } catch (err) { toast('Не получилось прочитать файл: ' + err.message); }
+    } catch (err) { toast(tx('Не получилось прочитать файл: ') + err.message); }
     e.target.value = '';
   });
 
@@ -698,6 +708,6 @@
     if (L) setTimeout(pollLive, L.status === 'warming' ? 5000 : Math.max(30, (L.refresh_s || 180) / 2) * 1000);
   }).catch((err) => {
     console.error(err);
-    $('#stage').innerHTML = `<p class="pane__empty">Не удалось прочитать отчёт: ${esc(err.message)}. Выполните python3 tools/embed_report.py</p>`;
+    $('#stage').innerHTML = `<p class="pane__empty">${tx('Не удалось прочитать отчёт: ')}${esc(err.message)}</p>`;
   });
 })();

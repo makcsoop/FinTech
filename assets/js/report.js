@@ -11,7 +11,8 @@
 (function () {
   'use strict';
 
-  const REPORT_URL = 'data/news_scoring_report.html';
+  const I18N = window.HMI18N || { lang: 'ru', base: '', t: (x) => x, decimal: ',' };
+  const REPORT_URL = I18N.base + 'data/news_scoring_report.html';
 
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const txt = (el) => (el ? clean(el.textContent) : '');
@@ -321,7 +322,25 @@
     return report;
   }
 
+  /** Английская версия: отчёт переведён заранее (tools/translate_report.py) и лежит готовой структурой. */
+  async function loadEnglish() {
+    if (!window.HM_REPORT_EN) {
+      await new Promise((resolve) => {
+        const s = document.createElement('script');
+        s.src = I18N.base + 'data/report.en.js';
+        s.onload = s.onerror = resolve;
+        document.head.appendChild(s);
+      });
+    }
+    const rep = window.HM_REPORT_EN;
+    if (!rep) throw new Error(I18N.t('Не удалось загрузить отчёт: ') + 'data/report.en.js');
+    rep.items = [...rep.original.items, ...rep.blind.items];
+    rep.byId = Object.fromEntries(rep.items.map((it) => [it.id, it]));
+    return rep;
+  }
+
   async function load() {
+    if (I18N.lang === 'en') return loadEnglish();
     if (/^https?:/.test(location.protocol)) {
       try {
         const res = await fetch(REPORT_URL, { cache: 'no-cache' });
@@ -332,7 +351,7 @@
     if (!window.HM_REPORT_EMBED) {
       await new Promise((resolve) => {
         const s = document.createElement('script');
-        s.src = 'data/report-embed.js';
+        s.src = I18N.base + 'data/report-embed.js';
         s.onload = s.onerror = resolve;
         document.head.appendChild(s);
       });
@@ -346,10 +365,12 @@
   /* ---------- живая лента: live/server.py ----------
      Сервера нет (GitHub Pages, file://, tools/serve.py) — null, сайт остаётся на отчёте. */
   const API = (new URLSearchParams(location.search).get('api') || '').replace(/\/$/, '');
+  /** адрес API: свой сервер (с английской страницы — на уровень выше) или ?api=…; язык — параметром */
+  const apiUrl = (path) => (API ? API + '/' : I18N.base) + path + (I18N.lang === 'en' ? '?lang=en' : '');
   async function loadLive() {
     if (!API && !/^https?:/.test(location.protocol)) return null;
     try {
-      const res = await fetch((API ? API + '/' : '') + 'api/live', { cache: 'no-store' });
+      const res = await fetch(apiUrl('api/live'), { cache: 'no-store' });
       if (!res.ok || !/json/.test(res.headers.get('content-type') || '')) return null;
       return await res.json();
     } catch (e) { return null; }
@@ -359,7 +380,7 @@
   async function loadPrices() {
     if (!API && !/^https?:/.test(location.protocol)) return null;
     try {
-      const res = await fetch((API ? API + '/' : '') + 'api/prices', { cache: 'no-store' });
+      const res = await fetch(apiUrl('api/prices'), { cache: 'no-store' });
       if (!res.ok || !/json/.test(res.headers.get('content-type') || '')) return null;
       return await res.json();
     } catch (e) { return null; }
@@ -377,7 +398,7 @@
       live, items,
       byId: Object.fromEntries(items.map((it) => [it.id, it])),
       method: Object.assign({}, report.method, { flow: live.flow }),
-      origin: { source: 'живая лента Honey Money', mode: 'live', loadedAt: new Date() },
+      origin: { source: I18N.t('живая лента Honey Money'), mode: 'live', loadedAt: new Date() },
     });
   }
 
@@ -389,7 +410,7 @@
   function fmt(n, opts) {
     if (n == null || isNaN(n)) return '—';
     const o = Object.assign({ digits: 2, sign: false }, opts);
-    const s = Math.abs(n).toFixed(o.digits).replace('.', ',');
+    const s = Math.abs(n).toFixed(o.digits).replace('.', I18N.decimal);
     if (o.sign) return (n > 0 ? '+' : n < 0 ? '−' : '+') + s;
     return (n < 0 ? '−' : '') + s;
   }

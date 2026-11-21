@@ -71,6 +71,8 @@ WantedBy=multi-user.target
 UNIT
 
 mkdir -p /etc/caddy/sites
+# Caddyfile пишем только на чистом сервере: в рабочем могут быть чужие блоки (например, демо по секретной ссылке)
+if [ ! -s /etc/caddy/Caddyfile ] || grep -q "Caddy has a default configuration" /etc/caddy/Caddyfile 2>/dev/null; then
 cat > /etc/caddy/Caddyfile <<CADDY
 # отдельные сайты (API — deploy_api.sh) лежат в /etc/caddy/sites/
 import /etc/caddy/sites/*.caddy
@@ -101,6 +103,7 @@ $DOMAIN {
 	}
 }
 CADDY
+fi
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 
 # --- сервер ---
